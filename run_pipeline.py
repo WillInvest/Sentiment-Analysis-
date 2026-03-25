@@ -33,14 +33,14 @@ STAGES = [
         "script": "scripts/extract_embeddings.py",
         "key": "embeddings",
         "type": "dict",
-        "expected_keys": ["bert", "finbert", "roberta"],
+        "expected_keys": None,  # computed from config
     },
     {
         "name": "Pretrained Sentiment",
         "script": "scripts/pretrained_sentiment.py",
         "key": "pretrained_sentiment",
         "type": "dict",
-        "expected_keys": ["finbert", "roberta", "llama"],
+        "expected_keys": None,  # computed from config
     },
     {
         "name": "Fine-tuning",
@@ -68,9 +68,11 @@ STAGES = [
 
 def build_finetune_keys():
     """Expected fine-tune run keys from config."""
-    encoders = ["bert", "finbert", "roberta"]
-    windows = ["window_1", "window_2", "window_3"]
-    horizons = [1, 3, 5, 10, 30]
+    import yaml
+    config = yaml.safe_load(Path("configs/experiment.yaml").read_text())
+    encoders = [name for name, cfg in config["models"].items() if "finetune_encoder" in cfg["roles"]]
+    windows = [w["name"] for w in config["windows"]]
+    horizons = config["horizons"]
     keys = []
     for e in encoders:
         for w in windows:
@@ -238,10 +240,20 @@ def set_title(text):
 # ─── Runner ───
 
 def main():
-    # Build finetune expected keys
+    # Build expected keys from config
+    import yaml
+    config = yaml.safe_load(Path("configs/experiment.yaml").read_text())
+
+    encoder_keys = [name for name, cfg in config["models"].items() if "finetune_encoder" in cfg["roles"]]
+    zeroshot_keys = [name for name, cfg in config["models"].items() if "zero_shot" in cfg["roles"]]
     ft_keys = build_finetune_keys()
+
     for s in STAGES:
-        if s["name"] == "Fine-tuning":
+        if s["name"] == "Extract Embeddings":
+            s["expected_keys"] = encoder_keys
+        elif s["name"] == "Pretrained Sentiment":
+            s["expected_keys"] = zeroshot_keys
+        elif s["name"] == "Fine-tuning":
             s["expected_keys"] = ft_keys
 
     start_time = time.time()

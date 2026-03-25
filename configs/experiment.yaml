@@ -1,54 +1,33 @@
 seed: 42
 
 models:
-  # NOTE: Pin revision hashes at project setup by running:
-  #   python -c "from huggingface_hub import model_info; print(model_info('bert-base-uncased').sha)"
-  # Replace "main" with the returned commit hash for reproducibility.
   bert:
     hf_id: "bert-base-uncased"
-    revision: "main"  # TODO: pin to commit hash at setup
+    revision: "main"
     roles: ["finetune_encoder"]
     embedding_dim: 768
   finbert:
     hf_id: "ProsusAI/finbert"
-    revision: "main"  # TODO: pin to commit hash at setup
+    revision: "main"
     roles: ["zero_shot", "finetune_encoder"]
     embedding_dim: 768
   roberta:
     hf_id: "cardiffnlp/twitter-roberta-base-sentiment-latest"
-    revision: "main"  # TODO: pin to commit hash at setup
+    revision: "main"
     roles: ["zero_shot", "finetune_encoder"]
     embedding_dim: 768
-  llama:
-    hf_id: "unsloth/Llama-3.2-1B-Instruct"  # ungated mirror of meta-llama/Llama-3.2-1B-Instruct
-    revision: "main"  # TODO: pin to commit hash at setup
-    roles: ["zero_shot"]
-    max_input_tokens: 512
 
 horizons: [1, 3, 5, 10, 30]
 
+# Fixed split: train 2017-2018, val 2019, test 2020
 windows:
-  - name: "window_1"
+  - name: "split"
     train_start: "2017-01-01"
     train_end: "2018-12-31"
     val_start: "2019-01-01"
-    val_end: "2019-06-30"
-    test_start: "2019-07-01"
-    test_end: "2019-12-31"
-  - name: "window_2"
-    train_start: "2017-01-01"
-    train_end: "2019-12-31"
-    val_start: "2020-01-01"
-    val_end: "2020-06-30"
-    test_start: "2020-07-01"
+    val_end: "2019-12-31"
+    test_start: "2020-01-01"
     test_end: "2020-12-31"
-  - name: "window_3"
-    train_start: "2017-01-01"
-    train_end: "2020-12-31"
-    val_start: "2021-01-01"
-    val_end: "2021-06-30"
-    test_start: "2021-07-01"
-    test_end: "2021-12-31"
 
 hyperparameters:
   n_configs: 25
