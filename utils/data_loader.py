@@ -42,7 +42,7 @@ def shift_to_next_trading_day(date: pd.Timestamp, trading_days: pd.DatetimeIndex
     future = trading_days[trading_days >= date]
     if len(future) == 0:
         return None
-    return future.iloc[0]
+    return future[0]
 
 
 def compute_forward_returns(
@@ -74,7 +74,7 @@ def compute_forward_returns(
         if target_idx >= len(trading_days_for_ticker):
             results[f"r_{h}d"] = None
         else:
-            target_date = trading_days_for_ticker.iloc[target_idx]
+            target_date = trading_days_for_ticker[target_idx]
             p_target = ticker_prices.get(target_date)
             if p_target is None:
                 results[f"r_{h}d"] = None
@@ -97,7 +97,7 @@ def build_dataset(news_df: pd.DataFrame, price_df: pd.DataFrame, config: dict) -
     # Get all trading days per ticker
     all_trading_days = {}
     for t in price_df["ticker"].unique():
-        days = price_df[price_df["ticker"] == t]["date"].sort_values().reset_index(drop=True)
+        days = pd.DatetimeIndex(price_df[price_df["ticker"] == t]["date"].sort_values().values)
         all_trading_days[t] = days
 
     # Reference trading days (SPX) for date shifting

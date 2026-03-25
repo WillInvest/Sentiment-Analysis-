@@ -64,7 +64,7 @@ def main():
 
         print("Loading raw data...")
         news, price = load_raw_data()
-        print(f"News: {len(news)} articles, Price: {len(price)} rows")
+        print(f"News: {len(news)} articles, Price: {len(price)} rows, Tickers: {price['ticker'].nunique()}")
 
         print("Building dataset (computing returns)...")
         df = build_dataset(news, price, config)

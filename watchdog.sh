@@ -2,9 +2,13 @@
 # ╔═══════════════════════════════════════════════════════════════╗
 # ║  Pipeline Watchdog                                           ║
 # ║                                                              ║
-# ║  Runs the pipeline. If it fails, sends the error log to      ║
-# ║  Claude Code CLI to diagnose and fix, then retries.          ║
+# ║  Runs the pipeline with live progress display.               ║
+# ║  If it fails, sends the error log to Claude Code CLI to      ║
+# ║  diagnose and fix, then retries.                             ║
 # ║  Repeats up to MAX_RETRIES times.                            ║
+# ║                                                              ║
+# ║  Usage: ./watchdog.sh [max_retries]                          ║
+# ║         ./watchdog.sh 10    # try up to 10 times             ║
 # ╚═══════════════════════════════════════════════════════════════╝
 
 set -u
@@ -22,8 +26,6 @@ log() { echo "[$(timestamp)] $*" | tee -a "$LOG_DIR/watchdog.log"; }
 
 extract_error_context() {
     local logfile="$1"
-    # Get the last 80 lines (enough for traceback + context)
-    # Plus grep for ERROR, Exception, Traceback lines with surrounding context
     {
         echo "=== LAST 80 LINES ==="
         tail -80 "$logfile"
@@ -41,26 +43,37 @@ while [ "$attempt" -lt "$MAX_RETRIES" ]; do
     attempt=$((attempt + 1))
     run_log="$LOG_DIR/run_${attempt}.log"
 
-    log "━━━ Attempt $attempt/$MAX_RETRIES ━━━"
-    log "Running pipeline → $run_log"
+    log ""
+    log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log "  Attempt $attempt/$MAX_RETRIES"
+    log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log "Pipeline log → $run_log"
+    log ""
 
-    # Run pipeline, capture all output
-    $PIPELINE_CMD > "$run_log" 2>&1
-    exit_code=$?
+    # Run pipeline with LIVE output (tee to both terminal and log file)
+    # Progress bar renders in terminal, full output captured in log
+    $PIPELINE_CMD 2>&1 | tee "$run_log"
+    exit_code=${PIPESTATUS[0]}
 
     if [ "$exit_code" -eq 0 ]; then
-        log "✓ Pipeline completed successfully on attempt $attempt!"
-        log "Check results/ for output."
+        log ""
+        log "╔═══════════════════════════════════════════╗"
+        log "║  ✓ Pipeline completed on attempt $attempt!       ║"
+        log "╚═══════════════════════════════════════════╝"
+        log ""
 
-        # Show final progress
         python3 -c "from utils.progress import print_progress_summary; print_progress_summary()" 2>/dev/null
         exit 0
     fi
 
+    log ""
     log "✗ Pipeline failed (exit code $exit_code)"
 
     if [ "$attempt" -ge "$MAX_RETRIES" ]; then
-        log "Max retries ($MAX_RETRIES) reached. Giving up."
+        log ""
+        log "╔═══════════════════════════════════════════╗"
+        log "║  Max retries ($MAX_RETRIES) reached. Giving up.   ║"
+        log "╚═══════════════════════════════════════════╝"
         log "Last log: $run_log"
         exit 1
     fi
@@ -69,7 +82,9 @@ while [ "$attempt" -lt "$MAX_RETRIES" ]; do
     error_context=$(extract_error_context "$run_log")
     fix_log="$LOG_DIR/fix_${attempt}.log"
 
-    log "Sending error to Claude Code for diagnosis..."
+    log ""
+    log "🔧 Sending error to Claude Code for auto-fix..."
+    log ""
 
     # Build the prompt for Claude
     prompt="$(cat <<PROMPT
@@ -100,13 +115,16 @@ PROMPT
 
     if [ "$claude_exit" -ne 0 ]; then
         log "⚠ Claude Code exited with code $claude_exit"
-        log "Claude output: $fix_log"
+        log "Claude output saved to: $fix_log"
         log "Retrying pipeline anyway..."
     else
-        log "Claude applied a fix. See: $fix_log"
+        # Show what Claude fixed
+        log "Claude's fix:"
+        cat "$fix_log" | head -10
+        log "(full output: $fix_log)"
     fi
 
-    # Brief pause before retry
+    log ""
     log "Retrying in 5 seconds..."
     sleep 5
 done
