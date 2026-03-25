@@ -20,7 +20,7 @@ models:
     roles: ["zero_shot", "finetune_encoder"]
     embedding_dim: 768
   llama:
-    hf_id: "meta-llama/Llama-3.2-1B-Instruct"
+    hf_id: "unsloth/Llama-3.2-1B-Instruct"  # ungated mirror of meta-llama/Llama-3.2-1B-Instruct
     revision: "main"  # TODO: pin to commit hash at setup
     roles: ["zero_shot"]
     max_input_tokens: 512
