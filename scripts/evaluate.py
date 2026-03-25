@@ -94,6 +94,10 @@ def evaluate_finetuned(config: dict) -> list[dict]:
 
     pred_df = pd.read_parquet(pred_path)
 
+    # Load val predictions once (used for threshold sweep)
+    val_pred_path = Path("results/predictions/finetune_val_predictions.parquet")
+    val_pred_df = pd.read_parquet(val_pred_path) if val_pred_path.exists() else None
+
     for (encoder, approach, horizon, window), group in pred_df.groupby(
         ["encoder", "approach", "horizon", "window"]
     ):
@@ -106,11 +110,9 @@ def evaluate_finetuned(config: dict) -> list[dict]:
         # Binary with fixed threshold
         fixed_metrics = compute_binary_metrics(actual, predicted, threshold=0.0)
 
-        # Binary with learned threshold — load val predictions saved by finetune.py
-        val_pred_path = Path("results/predictions/finetune_val_predictions.parquet")
+        # Binary with learned threshold — use val predictions saved by finetune.py
         best_thresh = 0.0
-        if val_pred_path.exists():
-            val_pred_df = pd.read_parquet(val_pred_path)
+        if val_pred_df is not None:
             val_subset = val_pred_df[
                 (val_pred_df["encoder"] == encoder) &
                 (val_pred_df["approach"] == approach) &

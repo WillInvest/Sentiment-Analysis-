@@ -59,6 +59,7 @@ def aggregate_monthly_finetuned(
     encoder: str,
     approach: str,
     horizon: str,
+    full_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Aggregate fine-tuned predictions per month, normalized to [-1, 1]."""
     subset = pred_df[
@@ -78,8 +79,8 @@ def aggregate_monthly_finetuned(
         subset["normalized"] = 0.0
 
     # Need date info — merge with test data
-    # predictions already have article_id, we need dates
-    full_df = pd.read_parquet("data/processed/full_dataset.parquet")
+    if full_df is None:
+        full_df = pd.read_parquet("data/processed/full_dataset.parquet")
     subset = subset.merge(full_df[["article_id", "date"]].drop_duplicates(), on="article_id", how="left")
     subset["month"] = pd.to_datetime(subset["date"]).dt.to_period("M")
 
@@ -186,7 +187,7 @@ def main():
             for encoder in pred_df["encoder"].unique():
                 for approach in pred_df["approach"].unique():
                     # Use r_30d for monthly trend comparison (closest to monthly horizon)
-                    monthly = aggregate_monthly_finetuned(pred_df, encoder, approach, "r_30d")
+                    monthly = aggregate_monthly_finetuned(pred_df, encoder, approach, "r_30d", full_df=full_df)
                     if monthly.empty:
                         continue
                     col_name = f"sentiment_{encoder}_{approach}_r_30d"

@@ -98,8 +98,8 @@ def train_model(
     hp: dict,
     config: dict,
     device: str,
-) -> tuple[nn.Module, list[dict]]:
-    """Train model with early stopping. Returns model and epoch logs."""
+) -> tuple[nn.Module, list[dict], float]:
+    """Train model with early stopping. Returns model, epoch logs, and best val loss."""
     optimizer_cls = {"adam": torch.optim.Adam, "adamw": torch.optim.AdamW}[hp["optimizer"]]
     optimizer = optimizer_cls(model.parameters(), lr=hp["learning_rate"])
 
