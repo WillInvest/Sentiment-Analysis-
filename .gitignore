@@ -1,0 +1,16 @@
+# Data
+data/raw/
+data/processed/
+
+# Results (large binary files)
+results/embeddings/
+results/checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Environment
+.env

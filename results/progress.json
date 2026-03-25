@@ -1,0 +1,10 @@
+{
+  "data_preparation": "pending",
+  "embeddings": {},
+  "pretrained_sentiment": {},
+  "finetune": {},
+  "evaluate": "pending",
+  "market_trend": "pending",
+  "last_updated": null,
+  "last_error": null
+}
