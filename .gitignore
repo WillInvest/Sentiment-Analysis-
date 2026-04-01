@@ -14,3 +14,8 @@ __pycache__/
 
 # Environment
 .env
+
+# Server worker
+.server_worker.lock
+.worktrees/
+results/server_worker.log
