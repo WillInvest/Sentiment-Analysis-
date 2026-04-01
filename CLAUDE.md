@@ -39,3 +39,31 @@ Place `news.csv` and `price.csv` in `data/raw/` before running.
 - Horizons: 1d, 3d, 5d, 10d, 30d (trading days, forward-looking from t+1)
 - Windows: 3 expanding rolling windows (see configs/experiment.yaml)
 - Models: BERT-base (finetune only), FinBERT (both), RoBERTa (both), Llama-3.2-1B (zero-shot only)
+
+## Autonomous Improvement Agent
+
+An autonomous "Scientist Agent" runs on a schedule to iteratively improve pipeline performance.
+
+### Architecture
+- **Cloud agent** (Anthropic scheduled trigger, every 2h): analyzes results, implements experiments, pushes branches
+- **Server worker** (`server_worker.sh`, crontab every 10min): polls for experiment branches, trains, pushes results
+
+### Branch Convention
+- `experiment/<NNN>-<name>` — code changes (pushed by cloud agent)
+- `results/<NNN>-<name>` — training results (pushed by server worker)
+- Only merged to `main` if composite score improves
+
+### Key Files
+- `utils/composite_score.py` — composite score computation
+- `docs/experiment_journal.md` — agent's persistent memory
+- `docs/agent_prompt.md` — the scheduled trigger's instructions
+- `server_worker.sh` — server-side training worker
+
+### Composite Score
+Run: `python3 -c "from utils.composite_score import print_score; print_score()"`
+
+### Server Worker
+The crontab entry (add manually):
+```
+*/10 * * * * cd /home/fao/projects/sentiment && bash server_worker.sh >> results/server_worker.log 2>&1
+```
