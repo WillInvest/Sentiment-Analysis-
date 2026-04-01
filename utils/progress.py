@@ -59,6 +59,21 @@ def get_full_progress() -> dict:
     return _load()
 
 
+def reset_stages(stages: list[str]) -> None:
+    """Reset specified pipeline stages to pending.
+
+    For dict-type stages (embeddings, finetune, etc.), clears all keys.
+    For string-type stages (evaluate, market_trend), sets to 'pending'.
+    """
+    state = _load()
+    for stage in stages:
+        if isinstance(state.get(stage), dict):
+            state[stage] = {}
+        else:
+            state[stage] = "pending"
+    _save(state)
+
+
 def print_progress_summary() -> None:
     """Print human-readable progress summary."""
     state = _load()
