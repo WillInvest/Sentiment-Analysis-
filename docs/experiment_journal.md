@@ -5,7 +5,7 @@
 - **Baseline Score:** 0.4412
 - **Current Best Score:** 0.4412
 - **Plateau Counter:** 4
-- **Last Experiment:** EXP-005
+- **Last Experiment:** EXP-006
 
 ## Baseline Metrics (2026-04-01)
 - Stock R² (best): 0.0039 (FinBERT, single, r_30d)
@@ -48,5 +48,12 @@
 - **Hypothesis:** Neural FC heads consistently achieve stock R² ≈ 0 across all experiments — they overfit on the small 2017-2018 training set despite dropout. GradientBoostingRegressor (sklearn) uses tree ensembles that are more robust to overfitting on tabular/embedding data. Added as a NEW approach ('gbm_separate') alongside existing FC heads — the FC head training is UNCHANGED, so baseline market R² (0.376) should be preserved. GBM can only add upside: if its predictions achieve higher R² or market correlation, the composite score max() operations capture the gain. Hypothesis: stock R² from ~0 to >0.01 (GBM), market R² possibly improving above 0.376.
 - **What changed:** `scripts/finetune.py` — added `to_numpy_arrays()`, `train_gbm()` helpers + GBM training loop (4 HP configs per encoder/horizon: 100/200 estimators × 3/5 depth) + GBM prediction generation. `results/progress.json` — reset finetune/evaluate/market_trend.
 - **Branch:** experiment/005-gbm-heads
-- **Result:** PENDING — branch pushed at 2026-04-02T10:33 UTC, results branch not yet available (checked at 2026-04-02T12:35 UTC ~2h elapsed; rechecked 2026-04-02T14:26 UTC ~3h53m elapsed; rechecked 2026-04-02T16:26 UTC ~5h53m elapsed, still within 6h timeout — training likely near completion)
+- **Result:** TIMEOUT — branch pushed at 2026-04-02T10:33 UTC, no results branch appeared after 7h54m (>6h timeout threshold). Server worker likely encountered an issue with GBM training (sklearn dependency missing, or training took too long). Rechecked at 2026-04-02T18:27 UTC.
+- **Outcome:** TIMEOUT. No improvement recorded. Plateau counter remains at 4.
+
+### EXP-006: Evaluate all horizons in market trend analysis (2026-04-02T18:27:00)
+- **Hypothesis:** The market_trend.py script only analyzed r_30d for finetuned models (hardcoded assumption "closest to monthly horizon"). The composite score uses max() over ols_r2 across all entries in market_trend.json. If any of the other 4 horizons (r_1d, r_3d, r_5d, r_10d) has higher correlation with SPX monthly returns than r_30d, the baseline score is currently missing this gain. This change is purely additive and conservative: the FinBERT separate r_30d baseline (market R²=0.376, p=0.045) is preserved, but we now discover whether shorter-horizon predictions aggregate to a stronger monthly market signal. No finetune or evaluate stages are touched — only market_trend is reset.
+- **What changed:** `scripts/market_trend.py` — replaced hardcoded r_30d loop with a loop over all 5 horizons from config["horizons"]. Now generates 5× as many finetuned market-trend comparisons (3 encoders × 2 approaches × 5 horizons = 30 entries vs. previous 6). `results/progress.json` — reset only market_trend stage; finetune and evaluate remain done.
+- **Branch:** experiment/006-all-horizons-market-trend
+- **Result:** PENDING — branch pushed at 2026-04-02T18:27 UTC
 - **Outcome:** PENDING
