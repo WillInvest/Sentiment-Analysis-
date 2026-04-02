@@ -4,6 +4,9 @@ Trains both separate per-horizon models and single multi-output models.
 Uses random search over hyperparameter grid. Saves checkpoints, training
 logs, and predictions. Fully resumable via progress.json.
 
+Also trains Ridge regression heads (sklearn RidgeCV) as an additional approach.
+Ridge predictions are appended to the finetune predictions parquet.
+
 Usage: python scripts/finetune.py
 """
 
@@ -18,6 +21,8 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader, TensorDataset
+from sklearn.linear_model import RidgeCV
+import joblib
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -195,6 +200,111 @@ def prepare_data_loaders(
 
     dataset = TensorDataset(X, y)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+
+# ─── Ridge Regression Utilities ───
+
+
+def build_embedding_matrix(embeddings: dict, df: pd.DataFrame, horizon_col: str | None, horizon_cols: list[str] | None):
+    """Build (X, y) numpy arrays from cached embeddings and split dataframe.
+
+    Returns (X, y, valid_rows) where valid_rows is a subset of df with NaN-free labels.
+    """
+    X_list, y_list, rows = [], [], []
+
+    for _, row in df.iterrows():
+        aid = row["article_id"]
+        if aid not in embeddings:
+            continue
+
+        if horizon_col:
+            val = float(row[horizon_col])
+            if np.isnan(val):
+                continue
+            y_list.append(val)
+        else:
+            vals = [float(row[c]) for c in horizon_cols]
+            # Skip rows with any NaN for multi-output
+            if any(np.isnan(v) for v in vals):
+                continue
+            y_list.append(vals)
+
+        X_list.append(embeddings[aid].numpy())
+        rows.append(row)
+
+    if not X_list:
+        return None, None, None
+
+    X = np.stack(X_list)
+    y = np.array(y_list)
+    return X, y, pd.DataFrame(rows)
+
+
+def train_ridge(X_train: np.ndarray, y_train: np.ndarray, seed: int = 42) -> RidgeCV:
+    """Train RidgeCV with a wide alpha grid. Returns fitted model."""
+    alphas = [1e-3, 1e-2, 0.1, 1.0, 10.0, 100.0, 1000.0, 1e4]
+    model = RidgeCV(alphas=alphas, fit_intercept=True, scoring="neg_mean_squared_error", cv=5)
+    model.fit(X_train, y_train)
+    return model
+
+
+def generate_ridge_predictions(config: dict, encoder_models: dict, split_type: str = "test") -> list[dict]:
+    """Train Ridge models on each encoder/horizon and generate predictions."""
+    horizons = config["horizons"]
+    horizon_cols = [f"r_{h}d" for h in horizons]
+    all_preds = []
+
+    Path("results/checkpoints/ridge").mkdir(parents=True, exist_ok=True)
+
+    for encoder_name, encoder_cfg in encoder_models.items():
+        print(f"\n  Ridge: {encoder_name}")
+        emb_path = f"results/embeddings/{encoder_name}_embeddings.pt"
+        embeddings = torch.load(emb_path, weights_only=False)
+
+        for window in config["windows"]:
+            wname = window["name"]
+            train_df = pd.read_parquet(f"data/processed/{wname}_train.parquet")
+            # Use val as additional training data for Ridge (no early-stopping needed)
+            val_df = pd.read_parquet(f"data/processed/{wname}_val.parquet")
+            test_df = pd.read_parquet(f"data/processed/{wname}_{split_type}.parquet")
+
+            # Combine train + val for Ridge fitting
+            train_val_df = pd.concat([train_df, val_df], ignore_index=True)
+
+            for horizon in horizons:
+                h_col = f"r_{horizon}d"
+                ckpt_path = Path(f"results/checkpoints/ridge/{encoder_name}_{horizon}d_{wname}.pkl")
+
+                # Train Ridge
+                X_tv, y_tv, _ = build_embedding_matrix(embeddings, train_val_df, h_col, None)
+                if X_tv is None or len(X_tv) < 20:
+                    print(f"    Skipping {encoder_name} {h_col}: insufficient data ({len(X_tv) if X_tv is not None else 0} samples)")
+                    continue
+
+                ridge_model = train_ridge(X_tv, y_tv, seed=config["seed"])
+                joblib.dump(ridge_model, ckpt_path)
+                print(f"    {encoder_name} {h_col} ({wname}): alpha={ridge_model.alpha_:.4f}, train R²={ridge_model.score(X_tv, y_tv):.4f}")
+
+                # Predict on split_type set
+                X_test, y_test, valid_rows = build_embedding_matrix(embeddings, test_df, h_col, None)
+                if X_test is None:
+                    continue
+
+                preds = ridge_model.predict(X_test)
+
+                for i, (_, row) in enumerate(valid_rows.iterrows()):
+                    all_preds.append({
+                        "encoder": encoder_name,
+                        "approach": "ridge",
+                        "horizon": h_col,
+                        "window": wname,
+                        "article_id": row["article_id"],
+                        "ticker": row["ticker"],
+                        "prediction": float(preds[i]),
+                        "actual": float(row[h_col]),
+                    })
+
+    return all_preds
 
 
 # ─── Main Pipeline ───
