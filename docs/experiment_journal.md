@@ -4,8 +4,8 @@
 - **Phase:** 1 (Improving Prediction)
 - **Baseline Score:** 0.4412
 - **Current Best Score:** 0.4412
-- **Plateau Counter:** 2
-- **Last Experiment:** EXP-003
+- **Plateau Counter:** 3
+- **Last Experiment:** EXP-004
 
 ## Baseline Metrics (2026-04-01)
 - Stock R² (best): 0.0039 (FinBERT, single, r_30d)
@@ -34,5 +34,12 @@
 - **Hypothesis:** [CLS] token embeddings from BERT-base/FinBERT/RoBERTa (not fine-tuned with sentence objectives) may not fully capture the financial sentiment signal distributed across WSJ article tokens. Mean-pooling over all non-padding hidden states provides a richer, information-dense feature vector for the FC heads. This is well-supported by the SBERT literature and is a fundamentally different representation that hasn't been tried. Expected improvement: stock R² should increase as FC heads receive better input features; market R² may improve as well.
 - **What changed:** `scripts/extract_embeddings.py` — replaced `last_hidden_state[:, 0, :]` ([CLS]) with masked mean-pool `(last_hidden_state * mask).sum(1) / mask.sum(1)`. `results/progress.json` — reset embeddings, finetune, evaluate, market_trend stages.
 - **Branch:** experiment/003-mean-pool-embeddings
+- **Result:** Composite score 0.358 (stock R² collapsed to 0.0002 — mean-pool hurt FC heads; market R² dropped from 0.376→0.224, market sig improved but insufficient)
+- **Outcome:** NO IMPROVEMENT (0.358 < 0.4412 baseline). Plateau counter: 3.
+
+### EXP-004: Weight Decay Regularization in HP Search (2026-04-02T09:00:00)
+- **Hypothesis:** The current HP grid has NO weight_decay parameter — AdamW is called with default weight_decay=0, making it identical to Adam. With a small training set (2017-2018), the FC heads likely overfit, keeping stock R² near zero. Adding weight_decay: [0.0, 0.001, 0.01, 0.1] to the search grid and passing it to the optimizer should reduce overfitting and improve stock R². Also bumping n_configs 25→40 to explore the larger space. Expected improvement: stock R² from 0.0039 toward 0.010+, boosting composite score above 0.4412.
+- **What changed:** `configs/experiment.yaml` — added `weight_decay` to HP grid, bumped `n_configs` 25→40. `scripts/finetune.py` — pass `weight_decay=hp.get("weight_decay", 0.0)` to optimizer constructor. `results/progress.json` — reset finetune/evaluate/market_trend.
+- **Branch:** experiment/004-weight-decay
 - **Result:** PENDING
 - **Outcome:** PENDING
