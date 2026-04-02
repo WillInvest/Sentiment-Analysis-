@@ -99,9 +99,15 @@ def train_model(
     config: dict,
     device: str,
 ) -> tuple[nn.Module, list[dict], float]:
-    """Train model with early stopping. Returns model, epoch logs, and best val loss."""
+    """Train model with early stopping and cosine annealing warm restarts.
+    Returns model, epoch logs, and best val loss."""
     optimizer_cls = {"adam": torch.optim.Adam, "adamw": torch.optim.AdamW}[hp["optimizer"]]
     optimizer = optimizer_cls(model.parameters(), lr=hp["learning_rate"])
+    # Cosine annealing warm restarts: LR cycles every T_0=20 epochs, helping
+    # escape local minima that a flat LR schedule may get stuck in.
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=20, T_mult=1, eta_min=hp["learning_rate"] * 0.01
+    )
 
     epochs = config["hyperparameters"]["epochs"]
     patience = config["hyperparameters"]["early_stopping_patience"]
@@ -124,6 +130,8 @@ def train_model(
             optimizer.step()
             train_losses.append(loss.item())
 
+        scheduler.step()
+
         # Validate
         model.eval()
         val_losses = []
@@ -136,7 +144,8 @@ def train_model(
 
         train_loss = np.mean(train_losses)
         val_loss = np.mean(val_losses)
-        logs.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+        logs.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss,
+                     "lr": scheduler.get_last_lr()[0]})
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss

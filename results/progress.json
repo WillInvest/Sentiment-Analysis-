@@ -1,10 +1,17 @@
 {
-  "data_preparation": "pending",
-  "embeddings": {},
-  "pretrained_sentiment": {},
+  "data_preparation": "done",
+  "embeddings": {
+    "bert": "done",
+    "finbert": "done",
+    "roberta": "done"
+  },
+  "pretrained_sentiment": {
+    "finbert": "done",
+    "roberta": "done"
+  },
   "finetune": {},
   "evaluate": "pending",
   "market_trend": "pending",
-  "last_updated": null,
+  "last_updated": "2026-04-02T04:30:00",
   "last_error": null
 }

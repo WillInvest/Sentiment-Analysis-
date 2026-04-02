@@ -40,7 +40,7 @@ hyperparameters:
     batch_size: [32, 64]
     optimizer: ["adam", "adamw"]
   epochs: 100
-  early_stopping_patience: 10
+  early_stopping_patience: 15
 
 threshold_sweep:
   step: 0.001
