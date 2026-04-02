@@ -58,10 +58,13 @@ for ref in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin/ex
     git worktree add "$wt" "$ref" --detach
 
     # Symlink gitignored data directories into worktree so pipeline can find them
-    mkdir -p "$wt/results"
     ln -sf "$REPO_DIR/data" "$wt/data"
+    # Create results subdirs and symlink heavy cached data
+    mkdir -p "$wt/results/metrics" "$wt/results/predictions" "$wt/results/figures" "$wt/results/training_logs"
     ln -sf "$REPO_DIR/results/embeddings" "$wt/results/embeddings"
     ln -sf "$REPO_DIR/results/checkpoints" "$wt/results/checkpoints"
+    # Copy progress.json so pipeline can track state in the worktree
+    cp "$REPO_DIR/results/progress.json" "$wt/results/progress.json" 2>/dev/null || true
 
     pushd "$wt" > /dev/null
 
