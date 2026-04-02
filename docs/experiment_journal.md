@@ -4,8 +4,8 @@
 - **Phase:** 1 (Improving Prediction)
 - **Baseline Score:** 0.4412
 - **Current Best Score:** 0.4412
-- **Plateau Counter:** 1
-- **Last Experiment:** EXP-002
+- **Plateau Counter:** 2
+- **Last Experiment:** EXP-003
 
 ## Baseline Metrics (2026-04-01)
 - Stock R² (best): 0.0039 (FinBERT, single, r_30d)
@@ -27,5 +27,12 @@
 - **Hypothesis:** Fixed LR + patience=10 leaves FC heads stuck in local minima. CosineAnnealingWarmRestarts (T_0=20 epochs, eta_min=1% of initial LR) periodically resets the LR, giving the optimizer multiple convergence attempts per run. Increased patience 10→15 ensures models get enough epochs to benefit from LR cycling. Expected improvement: stock R2 from 0.0039 toward 0.015+, boosting composite score above 0.4412.
 - **What changed:** `scripts/finetune.py` — added `CosineAnnealingWarmRestarts(T_0=20, T_mult=1, eta_min=lr*0.01)` scheduler with `scheduler.step()` per epoch; also logs LR in training logs. `configs/experiment.yaml` — `early_stopping_patience` 10→15. `results/progress.json` — reset finetune/evaluate/market_trend.
 - **Branch:** experiment/002-cosine-lr-scheduler
+- **Result:** Composite score 0.4057 (stock R² collapsed to 0.0000 — cosine LR cycling disrupted FC head convergence; market R² also dropped 0.376→0.337 with best model shifting to RoBERTa separate r_30d p=0.061)
+- **Outcome:** NO IMPROVEMENT (0.4057 < 0.4412 baseline). Plateau counter: 2.
+
+### EXP-003: Mean-Pool Embeddings (2026-04-02T06:33:00)
+- **Hypothesis:** [CLS] token embeddings from BERT-base/FinBERT/RoBERTa (not fine-tuned with sentence objectives) may not fully capture the financial sentiment signal distributed across WSJ article tokens. Mean-pooling over all non-padding hidden states provides a richer, information-dense feature vector for the FC heads. This is well-supported by the SBERT literature and is a fundamentally different representation that hasn't been tried. Expected improvement: stock R² should increase as FC heads receive better input features; market R² may improve as well.
+- **What changed:** `scripts/extract_embeddings.py` — replaced `last_hidden_state[:, 0, :]` ([CLS]) with masked mean-pool `(last_hidden_state * mask).sum(1) / mask.sum(1)`. `results/progress.json` — reset embeddings, finetune, evaluate, market_trend stages.
+- **Branch:** experiment/003-mean-pool-embeddings
 - **Result:** PENDING
 - **Outcome:** PENDING
