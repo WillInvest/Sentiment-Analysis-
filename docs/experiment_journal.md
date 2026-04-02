@@ -22,3 +22,4 @@
 - **Branch:** experiment/001-expanding-windows
 - **Result:** PENDING
 - **Outcome:** PENDING
+- **Check at 2026-04-02T02:22:00:** No results branch yet (~1h since push). Training still running. Will check next run.
