@@ -1,0 +1,40 @@
+{
+  "total_article_ticker_pairs": 20550,
+  "unique_articles": 20550,
+  "unique_tickers": 381,
+  "date_range": [
+    "2017-01-03",
+    "2020-12-30"
+  ],
+  "horizons": [
+    1,
+    3,
+    5,
+    10,
+    30
+  ],
+  "horizon_availability": {
+    "r_1d": 20550,
+    "r_3d": 20550,
+    "r_5d": 20550,
+    "r_10d": 20550,
+    "r_30d": 20550
+  },
+  "windows": {
+    "window1": {
+      "train": 10320,
+      "val": 5338,
+      "test": 4892
+    },
+    "window2": {
+      "train": 15658,
+      "val": 4892,
+      "test": 0
+    },
+    "window3": {
+      "train": 5010,
+      "val": 5310,
+      "test": 5338
+    }
+  }
+}
