@@ -1,0 +1,74 @@
+[
+  {
+    "label": "Finetuned bert (separate, r_30d)",
+    "n_months": 11,
+    "ols_beta": 0.13068524619006716,
+    "ols_alpha": 0.023114452931795478,
+    "ols_r2": 0.002983399273190579,
+    "ols_p_value": 0.8732736657956275,
+    "pearson_r": 0.054620502315437636,
+    "pearson_p": 0.8732736657956275,
+    "spearman_r": 0.08181818181818183,
+    "spearman_p": 0.8109903943000458
+  },
+  {
+    "label": "Finetuned bert (single, r_30d)",
+    "n_months": 11,
+    "ols_beta": 0.8604374549409906,
+    "ols_alpha": 0.0008921360156372501,
+    "ols_r2": 0.12157365098783135,
+    "ols_p_value": 0.2933059237952237,
+    "pearson_r": 0.3486741329491356,
+    "pearson_p": 0.29330592379522386,
+    "spearman_r": 0.22727272727272727,
+    "spearman_p": 0.501535667604937
+  },
+  {
+    "label": "Finetuned finbert (separate, r_30d)",
+    "n_months": 11,
+    "ols_beta": -0.41739527061134485,
+    "ols_alpha": -0.07110044822495339,
+    "ols_r2": 0.029873893122472128,
+    "ols_p_value": 0.61130496950683,
+    "pearson_r": -0.17284065818687488,
+    "pearson_p": 0.6113049695068291,
+    "spearman_r": -0.16363636363636366,
+    "spearman_p": 0.6306852146425357
+  },
+  {
+    "label": "Finetuned finbert (single, r_30d)",
+    "n_months": 11,
+    "ols_beta": 0.5747687813409985,
+    "ols_alpha": 0.3008959009645108,
+    "ols_r2": 0.18275666827473191,
+    "ols_p_value": 0.18968195843770524,
+    "pearson_r": 0.4275004892099332,
+    "pearson_p": 0.18968195843770522,
+    "spearman_r": 0.48181818181818187,
+    "spearman_p": 0.1334338382568288
+  },
+  {
+    "label": "Finetuned roberta (separate, r_30d)",
+    "n_months": 11,
+    "ols_beta": 1.5217468062103061,
+    "ols_alpha": -0.10529323577319959,
+    "ols_r2": 0.3366038575595839,
+    "ols_p_value": 0.0613246675550505,
+    "pearson_r": 0.5801757126591771,
+    "pearson_p": 0.06132466755505049,
+    "spearman_r": 0.7000000000000001,
+    "spearman_p": 0.01647097883651441
+  },
+  {
+    "label": "Finetuned roberta (single, r_30d)",
+    "n_months": 11,
+    "ols_beta": -0.1411827562946525,
+    "ols_alpha": -0.03003433821799025,
+    "ols_r2": 0.002291089919767564,
+    "ols_p_value": 0.8888568458833571,
+    "pearson_r": -0.047865331083863094,
+    "pearson_p": 0.888856845883357,
+    "spearman_r": -0.009090909090909092,
+    "spearman_p": 0.9788365001441937
+  }
+]

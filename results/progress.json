@@ -9,9 +9,29 @@
     "finbert": "done",
     "roberta": "done"
   },
-  "finetune": {},
-  "evaluate": "pending",
-  "market_trend": "pending",
-  "last_updated": "2026-04-02T04:30:00",
+  "finetune": {
+    "bert_separate_1d_split": "done",
+    "bert_separate_3d_split": "done",
+    "bert_separate_5d_split": "done",
+    "bert_separate_10d_split": "done",
+    "bert_separate_30d_split": "done",
+    "bert_single_split": "done",
+    "finbert_separate_1d_split": "done",
+    "finbert_separate_3d_split": "done",
+    "finbert_separate_5d_split": "done",
+    "finbert_separate_10d_split": "done",
+    "finbert_separate_30d_split": "done",
+    "finbert_single_split": "done",
+    "roberta_separate_1d_split": "done",
+    "roberta_separate_3d_split": "done",
+    "roberta_separate_5d_split": "done",
+    "roberta_separate_10d_split": "done",
+    "roberta_separate_30d_split": "done",
+    "roberta_single_split": "done",
+    "predictions": "done"
+  },
+  "evaluate": "done",
+  "market_trend": "done",
+  "last_updated": "2026-04-02T01:07:22.975073",
   "last_error": null
 }
