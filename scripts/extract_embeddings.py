@@ -1,6 +1,7 @@
-"""Extract [CLS] embeddings from frozen pretrained encoders.
+"""Extract mean-pool embeddings from frozen pretrained encoders.
 
-Extracts embeddings from BERT-base, FinBERT, and RoBERTa. Saves one .pt file
+Extracts embeddings from BERT-base, FinBERT, and RoBERTa by mean-pooling over
+all non-padding token hidden states (instead of [CLS] only). Saves one .pt file
 per encoder in results/embeddings/. Resumable — skips encoders already cached.
 
 Usage: python scripts/extract_embeddings.py
@@ -54,11 +55,14 @@ def extract_embeddings_for_model(
 
         with torch.no_grad():
             outputs = model(**inputs)
-            # [CLS] token is at position 0
-            cls_embeddings = outputs.last_hidden_state[:, 0, :].cpu()
+            # Mean-pool over all non-padding tokens (masked mean)
+            mask = inputs["attention_mask"].unsqueeze(-1).float()
+            sum_emb = (outputs.last_hidden_state * mask).sum(dim=1)
+            count = mask.sum(dim=1).clamp(min=1)
+            mean_embeddings = (sum_emb / count).cpu()
 
         for idx, aid in enumerate(batch_ids):
-            embeddings[aid] = cls_embeddings[idx]
+            embeddings[aid] = mean_embeddings[idx]
 
     # Free GPU memory
     del model
