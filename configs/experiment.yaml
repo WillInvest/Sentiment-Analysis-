@@ -30,7 +30,7 @@ windows:
     test_end: "2020-12-31"
 
 hyperparameters:
-  n_configs: 25
+  n_configs: 40
   grid:
     hidden_layers: [1, 2, 3]
     neurons: [128, 256, 512]
@@ -39,6 +39,7 @@ hyperparameters:
     learning_rate: [0.001, 0.0005, 0.0001]
     batch_size: [32, 64]
     optimizer: ["adam", "adamw"]
+    weight_decay: [0.0, 0.001, 0.01, 0.1]
   epochs: 100
   early_stopping_patience: 10
 

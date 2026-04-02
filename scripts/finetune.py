@@ -101,7 +101,7 @@ def train_model(
 ) -> tuple[nn.Module, list[dict], float]:
     """Train model with early stopping. Returns model, epoch logs, and best val loss."""
     optimizer_cls = {"adam": torch.optim.Adam, "adamw": torch.optim.AdamW}[hp["optimizer"]]
-    optimizer = optimizer_cls(model.parameters(), lr=hp["learning_rate"])
+    optimizer = optimizer_cls(model.parameters(), lr=hp["learning_rate"], weight_decay=hp.get("weight_decay", 0.0))
 
     epochs = config["hyperparameters"]["epochs"]
     patience = config["hyperparameters"]["early_stopping_patience"]
