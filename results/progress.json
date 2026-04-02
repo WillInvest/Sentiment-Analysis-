@@ -31,7 +31,7 @@
     "predictions": "done"
   },
   "evaluate": "done",
-  "market_trend": "done",
-  "last_updated": "2026-03-25T16:29:18.057148",
+  "market_trend": "pending",
+  "last_updated": "2026-04-02T18:27:00.000000",
   "last_error": null
 }

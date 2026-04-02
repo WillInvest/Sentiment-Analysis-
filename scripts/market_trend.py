@@ -179,21 +179,32 @@ def main():
             result = run_analysis(monthly, spx_monthly, col_name, f"Pretrained {model_name}")
             all_results.append(result)
 
-        # ─── Fine-tuned models (use r_30d / separate as default for monthly analysis) ───
+        # ─── Fine-tuned models (evaluate all horizons for monthly analysis) ───
         pred_path = Path("results/predictions/finetune_test_predictions.parquet")
         if pred_path.exists():
             pred_df = pd.read_parquet(pred_path)
 
+            finetuned_horizons = [f"r_{h}d" for h in config["horizons"]]
+
             for encoder in pred_df["encoder"].unique():
                 for approach in pred_df["approach"].unique():
-                    # Use r_30d for monthly trend comparison (closest to monthly horizon)
-                    monthly = aggregate_monthly_finetuned(pred_df, encoder, approach, "r_30d", full_df=full_df)
-                    if monthly.empty:
-                        continue
-                    col_name = f"sentiment_{encoder}_{approach}_r_30d"
-                    label = f"Finetuned {encoder} ({approach}, r_30d)"
-                    result = run_analysis(monthly, spx_monthly, col_name, label)
-                    all_results.append(result)
+                    for horizon in finetuned_horizons:
+                        # Skip if this horizon doesn't exist for this encoder/approach combo
+                        subset_check = pred_df[
+                            (pred_df["encoder"] == encoder) &
+                            (pred_df["approach"] == approach) &
+                            (pred_df["horizon"] == horizon)
+                        ]
+                        if subset_check.empty:
+                            continue
+
+                        monthly = aggregate_monthly_finetuned(pred_df, encoder, approach, horizon, full_df=full_df)
+                        if monthly.empty:
+                            continue
+                        col_name = f"sentiment_{encoder}_{approach}_{horizon}"
+                        label = f"Finetuned {encoder} ({approach}, {horizon})"
+                        result = run_analysis(monthly, spx_monthly, col_name, label)
+                        all_results.append(result)
 
         # ─── Time series overlay plot ───
         _plot_time_series_overlay(config, spx_monthly, full_df)
