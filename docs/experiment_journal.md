@@ -4,8 +4,8 @@
 - **Phase:** 1 (Improving Prediction)
 - **Baseline Score:** 0.4412
 - **Current Best Score:** 0.4412
-- **Plateau Counter:** 3
-- **Last Experiment:** EXP-004
+- **Plateau Counter:** 4
+- **Last Experiment:** EXP-005
 
 ## Baseline Metrics (2026-04-01)
 - Stock R² (best): 0.0039 (FinBERT, single, r_30d)
@@ -41,5 +41,12 @@
 - **Hypothesis:** The current HP grid has NO weight_decay parameter — AdamW is called with default weight_decay=0, making it identical to Adam. With a small training set (2017-2018), the FC heads likely overfit, keeping stock R² near zero. Adding weight_decay: [0.0, 0.001, 0.01, 0.1] to the search grid and passing it to the optimizer should reduce overfitting and improve stock R². Also bumping n_configs 25→40 to explore the larger space. Expected improvement: stock R² from 0.0039 toward 0.010+, boosting composite score above 0.4412.
 - **What changed:** `configs/experiment.yaml` — added `weight_decay` to HP grid, bumped `n_configs` 25→40. `scripts/finetune.py` — pass `weight_decay=hp.get("weight_decay", 0.0)` to optimizer constructor. `results/progress.json` — reset finetune/evaluate/market_trend.
 - **Branch:** experiment/004-weight-decay
+- **Result:** Composite score 0.4061 (stock R² dropped to 0.0019; market R² dropped 0.376→0.315, best model shifted to finetuned BERT single r_30d p=0.0725. Weight decay + larger n_configs disrupted the HP search, landing on worse configurations than baseline.)
+- **Outcome:** NO IMPROVEMENT (0.4061 < 0.4412 baseline). Plateau counter: 4. Remote branches could not be deleted (HTTP 403 server permission restriction).
+
+### EXP-005: Gradient Boosting Machine heads (2026-04-02T10:35:00)
+- **Hypothesis:** Neural FC heads consistently achieve stock R² ≈ 0 across all experiments — they overfit on the small 2017-2018 training set despite dropout. GradientBoostingRegressor (sklearn) uses tree ensembles that are more robust to overfitting on tabular/embedding data. Added as a NEW approach ('gbm_separate') alongside existing FC heads — the FC head training is UNCHANGED, so baseline market R² (0.376) should be preserved. GBM can only add upside: if its predictions achieve higher R² or market correlation, the composite score max() operations capture the gain. Hypothesis: stock R² from ~0 to >0.01 (GBM), market R² possibly improving above 0.376.
+- **What changed:** `scripts/finetune.py` — added `to_numpy_arrays()`, `train_gbm()` helpers + GBM training loop (4 HP configs per encoder/horizon: 100/200 estimators × 3/5 depth) + GBM prediction generation. `results/progress.json` — reset finetune/evaluate/market_trend.
+- **Branch:** experiment/005-gbm-heads
 - **Result:** PENDING
 - **Outcome:** PENDING
