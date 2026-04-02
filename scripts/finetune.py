@@ -13,6 +13,8 @@ import random
 from pathlib import Path
 from itertools import product
 
+import pickle
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -75,6 +77,51 @@ def masked_mse_loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     if mask.sum() == 0:
         return torch.tensor(0.0, requires_grad=True)
     return nn.functional.mse_loss(pred[mask], target[mask])
+
+
+def to_numpy_arrays(
+    embeddings: dict,
+    split_df: pd.DataFrame,
+    horizon_col: str | None = None,
+    horizon_cols: list[str] | None = None,
+) -> tuple:
+    """Convert embeddings + DataFrame to numpy arrays for sklearn models."""
+    X_list, y_list = [], []
+    for _, row in split_df.iterrows():
+        aid = row["article_id"]
+        if aid not in embeddings:
+            continue
+        if horizon_col:
+            val = float(row[horizon_col])
+            if np.isnan(val):
+                continue
+            X_list.append(embeddings[aid].numpy())
+            y_list.append(val)
+        elif horizon_cols:
+            X_list.append(embeddings[aid].numpy())
+            y_list.append([float(row[c]) if not np.isnan(float(row[c])) else 0.0 for c in horizon_cols])
+    if not X_list:
+        return None, None
+    return np.array(X_list), np.array(y_list)
+
+
+def train_gbm(X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray, seed: int):
+    """Train GradientBoostingRegressor with small HP search. Returns best model."""
+    from sklearn.ensemble import GradientBoostingRegressor
+    gbm_configs = [
+        {"n_estimators": 100, "max_depth": 3, "learning_rate": 0.1, "subsample": 0.8},
+        {"n_estimators": 200, "max_depth": 3, "learning_rate": 0.05, "subsample": 0.8},
+        {"n_estimators": 100, "max_depth": 5, "learning_rate": 0.05, "subsample": 0.8},
+        {"n_estimators": 200, "max_depth": 5, "learning_rate": 0.1, "subsample": 0.8},
+    ]
+    best_model, best_mse = None, float("inf")
+    for cfg in gbm_configs:
+        model = GradientBoostingRegressor(random_state=seed, **cfg)
+        model.fit(X_train, y_train)
+        mse = float(np.mean((model.predict(X_val) - y_val) ** 2))
+        if mse < best_mse:
+            best_mse, best_model = mse, model
+    return best_model
 
 
 def sample_hyperparams(config: dict) -> list[dict]:
@@ -330,6 +377,46 @@ def main():
 
             update_progress("finetune", run_key, "done")
 
+    # ─── GBM: Separate per-horizon for each encoder ───
+    for encoder_name, encoder_cfg in encoder_models.items():
+        emb_path = f"results/embeddings/{encoder_name}_embeddings.pt"
+        embeddings = torch.load(emb_path, weights_only=False)
+
+        for window in config["windows"]:
+            wname = window["name"]
+            train_df = pd.read_parquet(f"data/processed/{wname}_train.parquet")
+            val_df = pd.read_parquet(f"data/processed/{wname}_val.parquet")
+
+            for horizon in horizons:
+                h_col = f"r_{horizon}d"
+                run_key = f"{encoder_name}_gbm_separate_{horizon}d_{wname}"
+
+                if check_progress("finetune", run_key) == "done":
+                    print(f"  {run_key} already done. Skipping.")
+                    continue
+
+                update_progress("finetune", run_key, "in_progress")
+                print(f"\n  Training GBM: {run_key}")
+
+                X_train, y_train = to_numpy_arrays(embeddings, train_df, horizon_col=h_col)
+                X_val, y_val = to_numpy_arrays(embeddings, val_df, horizon_col=h_col)
+
+                if X_train is None or X_val is None or len(X_train) < 10:
+                    print(f"  Insufficient data for {run_key}, skipping.")
+                    update_progress("finetune", run_key, "done")
+                    continue
+
+                try:
+                    model = train_gbm(X_train, y_train, X_val, y_val, seed=config["seed"])
+                    ckpt_path = f"results/checkpoints/{run_key}_gbm.pkl"
+                    with open(ckpt_path, "wb") as f:
+                        pickle.dump(model, f)
+                    print(f"  GBM saved: {ckpt_path}")
+                except Exception as e:
+                    print(f"  GBM training failed for {run_key}: {e}")
+
+                update_progress("finetune", run_key, "done")
+
     # ─── Generate predictions on val and test sets ───
     if check_progress("finetune", "predictions") == "done":
         print("Predictions already generated. Skipping.")
@@ -436,6 +523,34 @@ def generate_predictions(config: dict, encoder_models: dict, device: str, split_
                         "prediction": float(preds[h_idx]),
                         "actual": row[f"r_{horizon}d"],
                     })
+
+            # GBM separate per-horizon
+            for horizon in horizons:
+                run_key = f"{encoder_name}_gbm_separate_{horizon}d_{wname}"
+                ckpt_path = Path(f"results/checkpoints/{run_key}_gbm.pkl")
+                if not ckpt_path.exists():
+                    continue
+                try:
+                    with open(ckpt_path, "rb") as f:
+                        gbm_model = pickle.load(f)
+                    for _, row in test_df.iterrows():
+                        aid = row["article_id"]
+                        if aid not in embeddings:
+                            continue
+                        x = embeddings[aid].numpy().reshape(1, -1)
+                        pred = float(gbm_model.predict(x)[0])
+                        all_predictions.append({
+                            "encoder": encoder_name,
+                            "approach": "gbm_separate",
+                            "horizon": f"r_{horizon}d",
+                            "window": wname,
+                            "article_id": aid,
+                            "ticker": row["ticker"],
+                            "prediction": pred,
+                            "actual": row[f"r_{horizon}d"],
+                        })
+                except Exception as e:
+                    print(f"  GBM prediction failed for {run_key}: {e}")
 
     pred_df = pd.DataFrame(all_predictions)
     pred_df.to_parquet(f"results/predictions/finetune_{split_type}_predictions.parquet", index=False)
