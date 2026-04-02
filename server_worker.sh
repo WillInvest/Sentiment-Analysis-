@@ -63,8 +63,11 @@ for ref in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin/ex
     mkdir -p "$wt/results/metrics" "$wt/results/predictions" "$wt/results/figures" "$wt/results/training_logs"
     ln -sf "$REPO_DIR/results/embeddings" "$wt/results/embeddings"
     ln -sf "$REPO_DIR/results/checkpoints" "$wt/results/checkpoints"
-    # Copy progress.json so pipeline can track state in the worktree
-    cp "$REPO_DIR/results/progress.json" "$wt/results/progress.json" 2>/dev/null || true
+    # Only copy progress.json if the experiment branch doesn't have its own
+    # (experiment branches typically commit a reset progress.json)
+    if [ ! -f "$wt/results/progress.json" ]; then
+        cp "$REPO_DIR/results/progress.json" "$wt/results/progress.json" 2>/dev/null || true
+    fi
 
     pushd "$wt" > /dev/null
 

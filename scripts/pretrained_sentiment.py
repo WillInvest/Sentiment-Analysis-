@@ -82,11 +82,13 @@ def run_llama_sentiment(
     """
     print(f"Loading Llama ({hf_id})...")
     tokenizer = AutoTokenizer.from_pretrained(hf_id)
+    from transformers import BitsAndBytesConfig
+    quantization_config = BitsAndBytesConfig(load_in_4bit=True)
     model = AutoModelForCausalLM.from_pretrained(
         hf_id,
         torch_dtype=torch.float16,
         device_map="auto",
-        load_in_4bit=True,
+        quantization_config=quantization_config,
     )
     model.eval()
 

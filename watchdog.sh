@@ -50,10 +50,11 @@ while [ "$attempt" -lt "$MAX_RETRIES" ]; do
     log "Pipeline log → $run_log"
     log ""
 
-    # Run pipeline with LIVE output (tee to both terminal and log file)
-    # Progress bar renders in terminal, full output captured in log
-    $PIPELINE_CMD 2>&1 | tee "$run_log"
-    exit_code=${PIPESTATUS[0]}
+    # Run pipeline with LIVE output + log capture
+    # Use 'script' to preserve TTY so progress bar renders correctly
+    # script -q -e -c "command" logfile — runs command in a PTY, logs to file
+    script -q -e -c "$PIPELINE_CMD" "$run_log"
+    exit_code=$?
 
     if [ "$exit_code" -eq 0 ]; then
         log ""
