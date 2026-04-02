@@ -48,5 +48,5 @@
 - **Hypothesis:** Neural FC heads consistently achieve stock R² ≈ 0 across all experiments — they overfit on the small 2017-2018 training set despite dropout. GradientBoostingRegressor (sklearn) uses tree ensembles that are more robust to overfitting on tabular/embedding data. Added as a NEW approach ('gbm_separate') alongside existing FC heads — the FC head training is UNCHANGED, so baseline market R² (0.376) should be preserved. GBM can only add upside: if its predictions achieve higher R² or market correlation, the composite score max() operations capture the gain. Hypothesis: stock R² from ~0 to >0.01 (GBM), market R² possibly improving above 0.376.
 - **What changed:** `scripts/finetune.py` — added `to_numpy_arrays()`, `train_gbm()` helpers + GBM training loop (4 HP configs per encoder/horizon: 100/200 estimators × 3/5 depth) + GBM prediction generation. `results/progress.json` — reset finetune/evaluate/market_trend.
 - **Branch:** experiment/005-gbm-heads
-- **Result:** PENDING
+- **Result:** PENDING — branch pushed at 2026-04-02T10:33 UTC, results branch not yet available (checked at 2026-04-02T12:35 UTC, ~2h elapsed, within 6h timeout)
 - **Outcome:** PENDING
