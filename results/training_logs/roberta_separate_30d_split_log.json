@@ -1,0 +1,70 @@
+{
+  "hyperparameters": {
+    "hidden_layers": 2,
+    "neurons": 256,
+    "activation": "gelu",
+    "dropout": 0.2,
+    "learning_rate": 0.0005,
+    "batch_size": 64,
+    "optimizer": "adam",
+    "weight_decay": 0.001
+  },
+  "logs": [
+    {
+      "epoch": 0,
+      "train_loss": 0.008437821773789178,
+      "val_loss": 0.018714920127032592
+    },
+    {
+      "epoch": 1,
+      "train_loss": 0.008084578514329078,
+      "val_loss": 0.0190476651935439
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.008009040317164711,
+      "val_loss": 0.019513345428831166
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.007990836272200133,
+      "val_loss": 0.01898111529382212
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.007960927005811238,
+      "val_loss": 0.018884558291617958
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.007987396777205077,
+      "val_loss": 0.019148940652874962
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.007986432923015528,
+      "val_loss": 0.019063727974536874
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.007974648930097895,
+      "val_loss": 0.019053120764770677
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.0079585117155709,
+      "val_loss": 0.019107593583785706
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.007965464987159694,
+      "val_loss": 0.019003365410580522
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.007974795528607052,
+      "val_loss": 0.01920775977140736
+    }
+  ],
+  "best_val_loss": 0.018714920127032592
+}
