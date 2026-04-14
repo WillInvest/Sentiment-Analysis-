@@ -5,6 +5,35 @@ data/processed/
 # Results (large binary files)
 results/embeddings/
 results/checkpoints/
+results/predictions/*.npy
+results/predictions/finbert_chunks.parquet
+results/predictions/finbert_full.parquet
+results/predictions/*_w*_test.parquet
+results/predictions/finetune_*_predictions.parquet
+results/predictions/finbert_sentiment.parquet
+results/predictions/roberta_sentiment.parquet
+
+# Logs
+results/pipeline.log
+results/hp_sweep.log
+results/pipeline_status.json
+results/watchdog/
+results/training_logs/
+
+# LaTeX aux
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+
+# Figures from earlier experiments not cited in the final report
+results/figures/approach_diff_*.png
+results/figures/binary_f1_comparison.png
+results/figures/heatmap_*.png
+results/figures/scatter_finetuned_*.png
+results/figures/scatter_pretrained_*.png
+results/figures/time_series_overlay.png
 
 # Python
 __pycache__/

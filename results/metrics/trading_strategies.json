@@ -1,0 +1,43 @@
+{
+  "rules": {
+    "max_hold_days": 5,
+    "take_profit": 0.03,
+    "stop_loss": 0.02,
+    "test_period": [
+      "2019-07-02",
+      "2021-01-13"
+    ]
+  },
+  "S1_pretrained_long_only": {
+    "n_trades": 2189,
+    "win_rate": 0.4902,
+    "total_return": 0.2875,
+    "annualized_return": 0.1784,
+    "sharpe": 0.6716,
+    "max_drawdown": -0.3342
+  },
+  "S2_finetuned_long_only": {
+    "n_trades": 7227,
+    "win_rate": 0.5015,
+    "total_return": 0.3208,
+    "annualized_return": 0.1981,
+    "sharpe": 0.7406,
+    "max_drawdown": -0.371
+  },
+  "S3_finetuned_long_short": {
+    "n_trades": 7410,
+    "win_rate": 0.5005,
+    "total_return": 0.3149,
+    "annualized_return": 0.1946,
+    "sharpe": 0.7337,
+    "max_drawdown": -0.371
+  },
+  "benchmark_SPX_buy_hold": {
+    "n_trades": 1,
+    "win_rate": null,
+    "total_return": 0.2815,
+    "annualized_return": 0.1748,
+    "sharpe": 0.7062,
+    "max_drawdown": -0.3392
+  }
+}

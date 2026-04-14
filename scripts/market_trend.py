@@ -1,251 +1,230 @@
-"""Monthly sentiment aggregation and SPX market trend analysis.
+"""Sentiment vs. market trend analysis.
 
-Aggregates sentiment per month, compares with SPX t+1 return via
-scatter plots, OLS regression, and correlation analysis.
+For each model:
+  1. Aggregate per-article sentiment to a monthly average.
+  2. Compare month t sentiment to month t+1 SPX return.
+  3. Fit a linear regression and report slope, intercept, R², correlation.
 
-Usage: python scripts/market_trend.py
+Models compared:
+  - PRETRAINED (zero-shot FinBERT): confidence-weighted (pos − neg), all 48 months.
+  - FINE-TUNED (regressor):         predicted r_1d, only 18 out-of-sample months
+                                    (the union of all 3 windows' test sets).
+
+Outputs:
+  results/metrics/market_trend.json
+  results/metrics/market_trend_panel.csv
+  results/figures/market_trend_scatter.png
+  results/figures/market_trend_timeseries.png
+
+Usage:
+    python scripts/market_trend.py
 """
+from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-from scipy import stats
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-from utils.data_loader import load_config
-from utils.progress import check_progress, update_progress
-
-
-def compute_spx_monthly_returns(price_df: pd.DataFrame) -> pd.DataFrame:
-    """Compute SPX monthly returns."""
-    spx = price_df[price_df["ticker"] == "SPX"].copy()
-    spx["date"] = pd.to_datetime(spx["date"])
-    spx = spx.sort_values("date")
-
-    # Get last trading day close per month
-    spx["month"] = spx["date"].dt.to_period("M")
-    monthly = spx.groupby("month")["close"].last().reset_index()
-    monthly["spx_return"] = monthly["close"].pct_change()
-    monthly = monthly.dropna()
-
-    return monthly
+DATASET = ROOT / "data/processed/full_dataset.parquet"
+CHUNKS = ROOT / "results/predictions/finbert_chunks.parquet"
+PRICE = ROOT / "data/raw/price.csv"
+PRED_DIR = ROOT / "results/predictions"
+OUT_JSON = ROOT / "results/metrics/market_trend.json"
+OUT_PANEL = ROOT / "results/metrics/market_trend_panel.csv"
+OUT_SCATTER = ROOT / "results/figures/market_trend_scatter.png"
+OUT_TIMESERIES = ROOT / "results/figures/market_trend_timeseries.png"
 
 
-def aggregate_monthly_sentiment(
-    full_df: pd.DataFrame,
-    sentiment_df: pd.DataFrame,
-    model_name: str,
-) -> pd.DataFrame:
-    """Average sentiment scores per month."""
-    merged = full_df.merge(sentiment_df, on="article_id", how="inner")
-    merged["month"] = pd.to_datetime(merged["date"]).dt.to_period("M")
-
-    monthly = merged.groupby("month")["sentiment_score"].mean().reset_index()
-    monthly.columns = ["month", f"sentiment_{model_name}"]
-    return monthly
+def confidence_weighted_pos_minus_neg(chunks: pd.DataFrame) -> pd.DataFrame:
+    """Per-article confidence-weighted (pos − neg). Returns DataFrame[article_id, score]."""
+    sums = chunks.groupby("article_id", sort=False)["confidence"].transform("sum")
+    chunks = chunks.copy()
+    chunks["w"] = chunks["confidence"] / sums.replace(0, np.nan)
+    chunks["w"] = chunks["w"].fillna(1.0 / chunks.groupby("article_id")["confidence"].transform("size"))
+    chunks["weighted_diff"] = (chunks["pos"] - chunks["neg"]) * chunks["w"]
+    out = chunks.groupby("article_id", sort=False)["weighted_diff"].sum().reset_index()
+    out.columns = ["article_id", "pretrained_score"]
+    return out
 
 
-def aggregate_monthly_finetuned(
-    pred_df: pd.DataFrame,
-    encoder: str,
-    approach: str,
-    horizon: str,
-    full_df: pd.DataFrame | None = None,
-) -> pd.DataFrame:
-    """Aggregate fine-tuned predictions per month, normalized to [-1, 1]."""
-    subset = pred_df[
-        (pred_df["encoder"] == encoder) &
-        (pred_df["approach"] == approach) &
-        (pred_df["horizon"] == horizon)
-    ].copy()
-
-    if subset.empty:
-        return pd.DataFrame()
-
-    # Min-max normalize predictions to [-1, 1]
-    pmin, pmax = subset["prediction"].min(), subset["prediction"].max()
-    if pmax - pmin > 0:
-        subset["normalized"] = 2 * (subset["prediction"] - pmin) / (pmax - pmin) - 1
-    else:
-        subset["normalized"] = 0.0
-
-    # Need date info — merge with test data
-    if full_df is None:
-        full_df = pd.read_parquet("data/processed/full_dataset.parquet")
-    subset = subset.merge(full_df[["article_id", "date"]].drop_duplicates(), on="article_id", how="left")
-    subset["month"] = pd.to_datetime(subset["date"]).dt.to_period("M")
-
-    monthly = subset.groupby("month")["normalized"].mean().reset_index()
-    col_name = f"sentiment_{encoder}_{approach}_{horizon}"
-    monthly.columns = ["month", col_name]
-    return monthly
+def monthly_aggregate(df: pd.DataFrame, score_col: str) -> pd.Series:
+    """Mean score per calendar month, indexed by month-end timestamp."""
+    s = df.set_index("date")[score_col]
+    return s.resample("ME").mean()
 
 
-def run_analysis(monthly_sentiment: pd.DataFrame, spx_monthly: pd.DataFrame, col_name: str, label: str) -> dict:
-    """Run OLS regression and correlation between sentiment_t and SPX_return_{t+1}."""
-    # Align: sentiment month t → SPX return month t+1
-    merged = monthly_sentiment.merge(spx_monthly, on="month", how="inner")
+def spx_monthly_return(price_path: Path) -> pd.Series:
+    px = pd.read_csv(price_path, parse_dates=["Date"])
+    spx = px[px["ticker"] == "SPX"].sort_values("Date").set_index("Date")["close"]
+    monthly_close = spx.resample("ME").last()
+    return monthly_close.pct_change().dropna()
 
-    # Shift: compare sentiment_t with SPX return at t+1
-    merged = merged.sort_values("month")
-    merged["spx_return_next"] = merged["spx_return"].shift(-1)
-    merged = merged.dropna(subset=["spx_return_next", col_name])
 
-    if len(merged) < 5:
-        return {"label": label, "n_months": len(merged), "error": "insufficient data"}
-
-    X = merged[col_name].values
-    y = merged["spx_return_next"].values
-
-    # OLS
-    X_ols = sm.add_constant(X)
-    ols_result = sm.OLS(y, X_ols).fit()
-
-    # Correlations
-    pearson_r, pearson_p = stats.pearsonr(X, y)
-    spearman_r, spearman_p = stats.spearmanr(X, y)
-
-    result = {
-        "label": label,
-        "n_months": len(merged),
-        "ols_beta": float(ols_result.params[1]),
-        "ols_alpha": float(ols_result.params[0]),
-        "ols_r2": float(ols_result.rsquared),
-        "ols_p_value": float(ols_result.pvalues[1]),
-        "pearson_r": float(pearson_r),
-        "pearson_p": float(pearson_p),
-        "spearman_r": float(spearman_r),
-        "spearman_p": float(spearman_p),
-    }
-
-    # Save scatter plot
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.scatter(X, y, alpha=0.7)
-    ax.plot(X, ols_result.predict(X_ols), color="red", linewidth=2)
-    ax.set_xlabel(f"Monthly Sentiment ({label})")
-    ax.set_ylabel("SPX Return (t+1)")
-    ax.set_title(f"Sentiment vs SPX Next-Month Return\n{label} (R²={result['ols_r2']:.4f}, p={result['ols_p_value']:.4f})")
-    fig.tight_layout()
-    fig.savefig(f"results/figures/scatter_{label.replace(' ', '_').lower()}.png", dpi=150)
-    plt.close(fig)
-
-    return result
+def linear_fit(x: np.ndarray, y: np.ndarray) -> dict:
+    """Slope, intercept, R², Pearson correlation."""
+    if len(x) < 3:
+        return {"slope": None, "intercept": None, "r2": None, "corr": None, "n": int(len(x))}
+    a, b = np.polyfit(x, y, 1)
+    yhat = a * x + b
+    ss_res = float(((y - yhat) ** 2).sum())
+    ss_tot = float(((y - y.mean()) ** 2).sum())
+    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+    corr = float(np.corrcoef(x, y)[0, 1])
+    return {"slope": float(a), "intercept": float(b), "r2": float(r2),
+            "corr": corr, "n": int(len(x))}
 
 
 def main():
-    if check_progress("market_trend") == "done":
-        print("Market trend analysis already completed. Skipping.")
-        return
+    print("Loading dataset and chunks…")
+    ds = pd.read_parquet(DATASET)[["article_id", "date"]].drop_duplicates("article_id")
+    chunks = pd.read_parquet(CHUNKS)
 
-    update_progress("market_trend", status="in_progress")
+    print("Computing per-article pretrained sentiment…")
+    art_sent = confidence_weighted_pos_minus_neg(chunks)
+    pre_articles = ds.merge(art_sent, on="article_id", how="inner")
+    pre_monthly = monthly_aggregate(pre_articles, "pretrained_score").rename("pretrained")
+    print(f"  pretrained months: {len(pre_monthly)}  "
+          f"({pre_monthly.index.min().date()} → {pre_monthly.index.max().date()})")
 
-    try:
-        config = load_config()
-        Path("results/figures").mkdir(parents=True, exist_ok=True)
+    print("Loading fine-tuned test predictions…")
+    reg_frames = []
+    for w in ("w1", "w2", "w3"):
+        f = PRED_DIR / f"regressor_{w}_test.parquet"
+        df = pd.read_parquet(f)[["article_id", "date", "pred"]]
+        df["window"] = w
+        reg_frames.append(df)
+    reg = pd.concat(reg_frames, ignore_index=True)
+    reg_articles = reg.groupby(["article_id", "date"], as_index=False)["pred"].mean()
+    ft_monthly = monthly_aggregate(
+        reg_articles.rename(columns={"pred": "ft_score"}), "ft_score"
+    ).rename("finetuned")
+    print(f"  fine-tuned months: {len(ft_monthly)}  "
+          f"({ft_monthly.index.min().date()} → {ft_monthly.index.max().date()})")
 
-        # Load price data for SPX returns
-        price_df = pd.read_csv("data/raw/price.csv")
-        price_df.rename(columns={"Date": "date"}, inplace=True)
-        price_df["date"] = pd.to_datetime(price_df["date"])
-        spx_monthly = compute_spx_monthly_returns(price_df)
+    print("Loading SPX monthly returns…")
+    spx_ret = spx_monthly_return(PRICE).rename("spx_return")
+    spx_next = spx_ret.shift(-1).rename("spx_next_return")
+    print(f"  SPX months: {len(spx_ret)}")
 
-        full_df = pd.read_parquet("data/processed/full_dataset.parquet")
+    panel = pd.concat([pre_monthly, ft_monthly, spx_next], axis=1)
+    panel.index.name = "month_end"
 
-        all_results = []
+    pre_panel = panel[["pretrained", "spx_next_return"]].dropna()
+    overlap = panel[["pretrained", "finetuned", "spx_next_return"]].dropna()
 
-        # ─── Pretrained models ───
-        zero_shot_models = {
-            name: cfg for name, cfg in config["models"].items()
-            if "zero_shot" in cfg["roles"]
-        }
+    print(f"  pretrained vs SPX(t+1) usable months: {len(pre_panel)}")
+    print(f"  overlap (head-to-head):               {len(overlap)}")
 
-        for model_name in zero_shot_models:
-            sent_path = Path(f"results/predictions/{model_name}_sentiment.parquet")
-            if not sent_path.exists():
-                continue
+    fit_pre_full = linear_fit(pre_panel["pretrained"].to_numpy(),
+                              pre_panel["spx_next_return"].to_numpy())
+    fit_pre_oos = linear_fit(overlap["pretrained"].to_numpy(),
+                             overlap["spx_next_return"].to_numpy())
+    fit_ft_oos = linear_fit(overlap["finetuned"].to_numpy(),
+                            overlap["spx_next_return"].to_numpy())
 
-            sentiment_df = pd.read_parquet(sent_path)
-            monthly = aggregate_monthly_sentiment(full_df, sentiment_df, model_name)
-            col_name = f"sentiment_{model_name}"
-            result = run_analysis(monthly, spx_monthly, col_name, f"Pretrained {model_name}")
-            all_results.append(result)
-
-        # ─── Fine-tuned models (use r_30d / separate as default for monthly analysis) ───
-        pred_path = Path("results/predictions/finetune_test_predictions.parquet")
-        if pred_path.exists():
-            pred_df = pd.read_parquet(pred_path)
-
-            for encoder in pred_df["encoder"].unique():
-                for approach in pred_df["approach"].unique():
-                    # Use r_30d for monthly trend comparison (closest to monthly horizon)
-                    monthly = aggregate_monthly_finetuned(pred_df, encoder, approach, "r_30d", full_df=full_df)
-                    if monthly.empty:
-                        continue
-                    col_name = f"sentiment_{encoder}_{approach}_r_30d"
-                    label = f"Finetuned {encoder} ({approach}, r_30d)"
-                    result = run_analysis(monthly, spx_monthly, col_name, label)
-                    all_results.append(result)
-
-        # ─── Time series overlay plot ───
-        _plot_time_series_overlay(config, spx_monthly, full_df)
-
-        # Save results
-        Path("results/metrics/market_trend.json").write_text(json.dumps(all_results, indent=2))
-        print(f"Market trend analysis complete. {len(all_results)} model comparisons saved.")
-
-        update_progress("market_trend", status="done")
-
-    except Exception as e:
-        update_progress("market_trend", status="error", error=str(e))
-        raise
-
-
-def _plot_time_series_overlay(config, spx_monthly, full_df):
-    """Plot monthly sentiment and SPX return time series overlay."""
-    zero_shot_models = {
-        name: cfg for name, cfg in config["models"].items()
-        if "zero_shot" in cfg["roles"]
+    summary = {
+        "pretrained_full": {
+            **fit_pre_full,
+            "months": [str(pre_panel.index.min().date()), str(pre_panel.index.max().date())],
+        },
+        "head_to_head_pretrained": {
+            **fit_pre_oos,
+            "months": [str(overlap.index.min().date()), str(overlap.index.max().date())],
+        },
+        "head_to_head_finetuned": {
+            **fit_ft_oos,
+            "months": [str(overlap.index.min().date()), str(overlap.index.max().date())],
+        },
     }
 
-    fig, axes = plt.subplots(len(zero_shot_models), 1, figsize=(14, 4 * len(zero_shot_models)), sharex=True)
-    if len(zero_shot_models) == 1:
-        axes = [axes]
+    OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
+    OUT_JSON.write_text(json.dumps(summary, indent=2))
+    print(f"  wrote {OUT_JSON}")
 
-    for ax, model_name in zip(axes, zero_shot_models):
-        sent_path = Path(f"results/predictions/{model_name}_sentiment.parquet")
-        if not sent_path.exists():
-            continue
+    # Scatter plot — 3 panels
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
 
-        sentiment_df = pd.read_parquet(sent_path)
-        monthly = aggregate_monthly_sentiment(full_df, sentiment_df, model_name)
-        col = f"sentiment_{model_name}"
+    def scatter_panel(ax, x, y, fit, title, xlabel):
+        ax.scatter(x, y, s=42, alpha=0.7, edgecolor="k", linewidth=0.4, color="#4C72B0")
+        if fit["slope"] is not None and len(x) >= 2:
+            xx = np.linspace(x.min(), x.max(), 50)
+            ax.plot(xx, fit["slope"] * xx + fit["intercept"], "r-", lw=1.5)
+        ax.axhline(0, color="gray", lw=0.5)
+        ax.axvline(0, color="gray", lw=0.5)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel("SPX return next month")
+        if fit["corr"] is not None:
+            sub = f"n={fit['n']}  corr={fit['corr']:.3f}  R²={fit['r2']:.3f}"
+        else:
+            sub = f"n={fit['n']}"
+        ax.set_title(f"{title}\n{sub}")
 
-        merged = monthly.merge(spx_monthly, on="month", how="inner").sort_values("month")
-        merged["month_dt"] = merged["month"].dt.to_timestamp()
+    scatter_panel(axes[0],
+                  pre_panel["pretrained"].to_numpy(),
+                  pre_panel["spx_next_return"].to_numpy(),
+                  fit_pre_full,
+                  "Pretrained (full 4 years)",
+                  "monthly mean (pos − neg)")
+    scatter_panel(axes[1],
+                  overlap["pretrained"].to_numpy(),
+                  overlap["spx_next_return"].to_numpy(),
+                  fit_pre_oos,
+                  "Pretrained (18-month OOS window)",
+                  "monthly mean (pos − neg)")
+    scatter_panel(axes[2],
+                  overlap["finetuned"].to_numpy(),
+                  overlap["spx_next_return"].to_numpy(),
+                  fit_ft_oos,
+                  "Fine-tuned regressor (same 18 months)",
+                  "monthly mean predicted r_1d")
+    plt.tight_layout()
+    OUT_SCATTER.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(OUT_SCATTER, dpi=140)
+    print(f"  wrote {OUT_SCATTER}")
 
-        ax.plot(merged["month_dt"], merged[col], "b-o", label="Sentiment", markersize=4)
-        ax2 = ax.twinx()
-        ax2.plot(merged["month_dt"], merged["spx_return"].shift(-1), "r-s", label="SPX Return (t+1)", markersize=4, alpha=0.7)
+    # Time series with twin axis
+    fig, ax1 = plt.subplots(figsize=(13, 4.5))
+    ax2 = ax1.twinx()
 
-        ax.set_ylabel("Sentiment", color="blue")
-        ax2.set_ylabel("SPX Return (t+1)", color="red")
-        ax.set_title(f"{model_name}")
-        ax.legend(loc="upper left")
-        ax2.legend(loc="upper right")
+    months = panel.index
+    ax1.plot(months, panel["pretrained"], color="#4C72B0", marker="o", ms=4,
+             label="pretrained sentiment", lw=1.4)
+    ft_months = panel["finetuned"].dropna().index
+    ax1.plot(ft_months, panel.loc[ft_months, "finetuned"],
+             color="#55A868", marker="s", ms=4,
+             label="fine-tuned sentiment (OOS)", lw=1.4)
+    ax2.plot(months, panel["spx_next_return"], color="#C44E52", marker="x", ms=5,
+             label="SPX next-month return", lw=1.2, alpha=0.8)
 
-    fig.suptitle("Monthly Sentiment vs SPX Next-Month Return", fontsize=14, y=1.02)
-    fig.tight_layout()
-    fig.savefig("results/figures/time_series_overlay.png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
+    ax1.axhline(0, color="gray", lw=0.4)
+    ax2.axhline(0, color="gray", lw=0.4, ls="--")
+    ax1.set_xlabel("month")
+    ax1.set_ylabel("monthly sentiment", color="#4C72B0")
+    ax2.set_ylabel("SPX return (next month)", color="#C44E52")
+    ax1.tick_params(axis="y", labelcolor="#4C72B0")
+    ax2.tick_params(axis="y", labelcolor="#C44E52")
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", framealpha=0.9)
+
+    plt.title("Monthly sentiment vs. next-month SPX return")
+    plt.tight_layout()
+    fig.savefig(OUT_TIMESERIES, dpi=140)
+    print(f"  wrote {OUT_TIMESERIES}")
+
+    panel.to_csv(OUT_PANEL)
+    print(f"  wrote {OUT_PANEL}")
+
+    print("\nResults summary:")
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
